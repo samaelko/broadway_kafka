@@ -290,7 +290,9 @@ defmodule BroadwayKafka.Producer do
       shutting_down?: false,
       buffer: :queue.new(),
       max_demand: max_demand,
-      shared_client: config.shared_client
+      shared_client: config.shared_client,
+      max_acks: Keyword.get(opts, :max_acks, :infinity),
+      max_buffer_size: Keyword.get(opts, :max_buffer_size, :infinity)
     }
 
     {:producer, connect(state)}
@@ -315,6 +317,7 @@ defmodule BroadwayKafka.Producer do
 
   @impl GenStage
   def handle_demand(incoming_demand, %{demand: demand} = state) do
+    check_overload!(state)
     maybe_schedule_poll(%{state | demand: demand + incoming_demand}, 0)
   end
 
@@ -352,6 +355,7 @@ defmodule BroadwayKafka.Producer do
     #
     # Note the key may be out of date when polling has been scheduled and
     # assignments were revoked afterwards, which is why check 3 is necessary.
+    check_overload!(state)
     offset = Acknowledger.last_offset(acks, key)
 
     if not state.shutting_down? and
@@ -371,10 +375,12 @@ defmodule BroadwayKafka.Producer do
   end
 
   def handle_info(:maybe_schedule_poll, state) do
+    check_overload!(state)
     maybe_schedule_poll(%{state | receive_timer: nil}, state.receive_interval)
   end
 
   def handle_info({:put_assignments, group_generation_id, assignments}, state) do
+    check_overload!(state)
     list =
       Enum.map(assignments, fn assignment ->
         brod_received_assignment(
@@ -418,6 +424,7 @@ defmodule BroadwayKafka.Producer do
   end
 
   def handle_info({:ack, key, offsets}, state) do
+    check_overload!(state)
     %{group_coordinator: group_coordinator, client: client, acks: acks, config: config} = state
     {generation_id, topic, partition} = key
 
@@ -800,5 +807,13 @@ defmodule BroadwayKafka.Producer do
         state.config.offset_commit_on_ack
 
     %{config | offset_commit_on_ack: offset_commit_on_ack}
+  end
+
+  defp check_overload!(%{acks: acks, messages_buffer: buffer, max_acks: max_acks, max_buffer_size: max_buf}) do
+    cond do
+      is_integer(max_acks) and map_size(acks) > max_acks -> exit(:acks_overload)
+      is_integer(max_buf) and :queue.len(buffer) > max_buf -> exit(:buffer_overload)
+      true -> :ok
+    end
   end
 end
