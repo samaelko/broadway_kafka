@@ -291,8 +291,8 @@ defmodule BroadwayKafka.Producer do
       buffer: :queue.new(),
       max_demand: max_demand,
       shared_client: config.shared_client,
-      max_acks: Keyword.get(opts, :max_acks, :infinity),
-      max_buffer_size: Keyword.get(opts, :max_buffer_size, :infinity)
+      max_acks: opts[:max_acks] || :infinity,
+      max_buffer_size: opts[:max_buffer_size] || :infinity
     }
 
     {:producer, connect(state)}
