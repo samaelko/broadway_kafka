@@ -810,6 +810,7 @@ defmodule BroadwayKafka.Producer do
   end
 
   defp check_overload!(%{acks: acks, buffer: buffer, max_acks: max_acks, max_buffer_size: max_buf}) do
+    Logger.error("Trying to check_overload: max_acks #{max_acks}, acks #{map_size(acks)}, max_buf #{max_buf}, buf: #{:queue.len(buffer)}")
     cond do
       is_integer(max_acks) and map_size(acks) > max_acks ->
         Logger.error("Restarting worker, acks overload")
