@@ -254,6 +254,8 @@ defmodule BroadwayKafka.Producer do
 
     config = opts[:initialized_client_config]
 
+    Logger.error("BroadwayKafka.Producer init with user config: #{inspect(config)}")
+
     draining_after_revoke_flag =
       self()
       |> drain_after_revoke_table_name!()
@@ -811,11 +813,6 @@ defmodule BroadwayKafka.Producer do
   defp check_overload!(%{acks: acks, buffer: buffer, config: config}) do
     max_acks = Map.get(config, :max_acks, :infinity)
     max_buf = Map.get(config, :max_buffer_size, :infinity)
-
-    Logger.error(
-      "Trying to check_overload: max_acks #{max_acks}, acks #{map_size(acks)}, max_buf #{max_buf}, buf: #{:queue.len(buffer)}"
-    )
-
     cond do
       is_integer(max_acks) and map_size(acks) > max_acks ->
         Logger.error("Restarting worker, acks overload")
