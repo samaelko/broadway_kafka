@@ -290,9 +290,7 @@ defmodule BroadwayKafka.Producer do
       shutting_down?: false,
       buffer: :queue.new(),
       max_demand: max_demand,
-      shared_client: config.shared_client,
-      max_acks: opts[:max_acks] || :infinity,
-      max_buffer_size: opts[:max_buffer_size] || :infinity
+      shared_client: config.shared_client
     }
 
     {:producer, connect(state)}
@@ -381,6 +379,7 @@ defmodule BroadwayKafka.Producer do
 
   def handle_info({:put_assignments, group_generation_id, assignments}, state) do
     check_overload!(state)
+
     list =
       Enum.map(assignments, fn assignment ->
         brod_received_assignment(
@@ -809,16 +808,25 @@ defmodule BroadwayKafka.Producer do
     %{config | offset_commit_on_ack: offset_commit_on_ack}
   end
 
-  defp check_overload!(%{acks: acks, buffer: buffer, max_acks: max_acks, max_buffer_size: max_buf}) do
-    Logger.error("Trying to check_overload: max_acks #{max_acks}, acks #{map_size(acks)}, max_buf #{max_buf}, buf: #{:queue.len(buffer)}")
+  defp check_overload!(%{acks: acks, buffer: buffer, config: config}) do
+    max_acks = Map.get(config, :max_acks, :infinity)
+    max_buf = Map.get(config, :max_buffer_size, :infinity)
+
+    Logger.error(
+      "Trying to check_overload: max_acks #{max_acks}, acks #{map_size(acks)}, max_buf #{max_buf}, buf: #{:queue.len(buffer)}"
+    )
+
     cond do
       is_integer(max_acks) and map_size(acks) > max_acks ->
         Logger.error("Restarting worker, acks overload")
         exit(:acks_overload)
+
       is_integer(max_buf) and :queue.len(buffer) > max_buf ->
         Logger.error("Restarting worker, buffer overload")
         exit(:buffer_overload)
-      true -> :ok
+
+      true ->
+        :ok
     end
   end
 end
