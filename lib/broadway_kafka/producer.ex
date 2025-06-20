@@ -252,9 +252,15 @@ defmodule BroadwayKafka.Producer do
   def init(opts) do
     Process.flag(:trap_exit, true)
 
-    config = opts[:initialized_client_config]
+    {_module, module_opts} = opts[:broadway][:producer][:module]
 
-    Logger.error("BroadwayKafka.Producer init with user config: #{inspect(config)}")
+    max_acks = Keyword.get(module_opts, :max_acks, :infinity)
+    max_buffer_size = Keyword.get(module_opts, :max_buffer_size, :infinity)
+
+    config =
+      opts[:initialized_client_config]
+      |> Map.put(:max_acks, max_acks)
+      |> Map.put(:max_buffer_size, max_buffer_size)
 
     draining_after_revoke_flag =
       self()
@@ -811,14 +817,12 @@ defmodule BroadwayKafka.Producer do
   end
 
   defp check_overload!(%{acks: acks, buffer: buffer, config: config}) do
-    max_acks = Map.get(config, :max_acks, :infinity)
-    max_buf = Map.get(config, :max_buffer_size, :infinity)
     cond do
-      is_integer(max_acks) and map_size(acks) > max_acks ->
+      is_integer(config.max_acks) and map_size(acks) > config.max_acks ->
         Logger.error("Restarting worker, acks overload")
         exit(:acks_overload)
 
-      is_integer(max_buf) and :queue.len(buffer) > max_buf ->
+      is_integer(config.max_buffer_size) and :queue.len(buffer) > config.max_buffer_size ->
         Logger.error("Restarting worker, buffer overload")
         exit(:buffer_overload)
 
