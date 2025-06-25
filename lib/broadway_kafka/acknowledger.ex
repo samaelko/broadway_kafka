@@ -86,7 +86,7 @@ defmodule BroadwayKafka.Acknowledger do
 
     next = List.first(pending) || last
     new_next = List.first(new_pending) || last
-    update = if new_next > next, do: new_next - 1, else: nil
+    update = if new_next >= next, do: new_next - 1, else: nil
 
     value = {new_pending, last, new_seen}
     {drained?(value), update, %{acknowledgers | key => value}}
