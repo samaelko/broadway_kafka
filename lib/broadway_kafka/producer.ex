@@ -1,4 +1,4 @@
-defmodule BroadwayKafka.Producer do
+defmodule do
   @moduledoc """
   A Kafka connector for Broadway.
 
@@ -420,9 +420,8 @@ defmodule BroadwayKafka.Producer do
   def handle_info({:ack, key, offsets}, state) do
     %{group_coordinator: group_coordinator, client: client, acks: acks, config: config} = state
     {generation_id, topic, partition} = key
-
-    {drained?, new_offset, updated_acks} = Acknowledger.update_current_offset(acks, key, offsets)
     previous_offset = Acknowledger.last_offset(acks, key)
+    {drained?, new_offset, updated_acks} = Acknowledger.update_current_offset(acks, key, offsets)
 
     cond do
       new_offset == nil ->
