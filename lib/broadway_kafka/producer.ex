@@ -427,9 +427,9 @@ defmodule BroadwayKafka.Producer do
       new_offset == nil ->
         nil
 
-      previous_offset != nil and new_offset <= previous_offset ->
+      previous_offset != nil and new_offset < previous_offset ->
         Logger.error(
-          "Out-of-order commit attempt: #{topic}-#{partition}: #{new_offset} =< #{previous_offset}. Ignoring."
+          "Out-of-order commit attempt: #{topic}-#{partition}: #{new_offset} < #{previous_offset}. Ignoring."
         )
 
       true ->
