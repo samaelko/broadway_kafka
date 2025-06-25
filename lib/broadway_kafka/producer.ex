@@ -422,21 +422,31 @@ defmodule BroadwayKafka.Producer do
     {generation_id, topic, partition} = key
 
     {drained?, new_offset, updated_acks} = Acknowledger.update_current_offset(acks, key, offsets)
+    previous_offset = Acknowledger.last_offset(acks, key)
 
-    if new_offset do
-      try do
-        client.ack(
-          group_coordinator,
-          generation_id,
-          topic,
-          partition,
-          new_offset,
-          disable_offset_commit_during_revoke_call(config, state)
+    cond do
+      new_offset == nil ->
+        nil
+
+      previous_offset != nil and new_offset < previous_offset ->
+        Logger.error(
+          "Out-of-order commit attempt: #{topic}-#{partition}: #{new_offset} < #{previous_offset}. Ignoring."
         )
-      catch
-        kind, reason ->
-          Logger.error(Exception.format(kind, reason, __STACKTRACE__))
-      end
+
+      true ->
+        try do
+          client.ack(
+            group_coordinator,
+            generation_id,
+            topic,
+            partition,
+            new_offset,
+            disable_offset_commit_during_revoke_call(config, state)
+          )
+        catch
+          kind, reason ->
+            Logger.error(Exception.format(kind, reason, __STACKTRACE__))
+        end
     end
 
     new_state =
