@@ -252,6 +252,8 @@ defmodule BroadwayKafka.Producer do
   def init(opts) do
     Process.flag(:trap_exit, true)
 
+    Logger.error("Starting producer, opts: #{inspect(opts)}")
+
     {_module, module_opts} = opts[:broadway][:producer][:module]
 
     max_acks = Keyword.get(module_opts, :max_acks, :infinity)
@@ -261,6 +263,8 @@ defmodule BroadwayKafka.Producer do
       opts[:initialized_client_config]
       |> Map.put(:max_acks, max_acks)
       |> Map.put(:max_buffer_size, max_buffer_size)
+
+    Logger.error("Starting producer, config: #{inspect(config)}")
 
     draining_after_revoke_flag =
       self()
