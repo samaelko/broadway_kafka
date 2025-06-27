@@ -257,12 +257,10 @@ defmodule BroadwayKafka.Producer do
     {_module, module_opts} = opts[:broadway][:producer][:module]
 
     max_acks = Keyword.get(module_opts, :max_acks, :infinity)
-    max_buffer_size = Keyword.get(module_opts, :max_buffer_size, :infinity)
 
     config =
       opts[:initialized_client_config]
       |> Map.put(:max_acks, max_acks)
-      |> Map.put(:max_buffer_size, max_buffer_size)
 
     Logger.error("Starting producer, config: #{inspect(config)}")
 
@@ -820,18 +818,37 @@ defmodule BroadwayKafka.Producer do
     %{config | offset_commit_on_ack: offset_commit_on_ack}
   end
 
-  defp check_overload!(%{acks: acks, buffer: buffer, config: config}) do
-    cond do
-      is_integer(config.max_acks) and map_size(acks) > config.max_acks ->
-        Logger.error("Restarting worker, acks overload")
-        exit(:acks_overload)
+  defp check_overload!(%{acks: acks, config: config}) do
+    Logger.error("Check overload, acks: #{inspect(acks)}")
 
-      is_integer(config.max_buffer_size) and :queue.len(buffer) > config.max_buffer_size ->
-        Logger.error("Restarting worker, buffer overload")
-        exit(:buffer_overload)
+    # Для начала попробуем ограничение по каждой партиции
+    Enum.each(acks, fn {{_, topic, partition}, {_acked_offsets, _current_offset, pending_offsets}} ->
+      cond do
+        is_integer(config.max_acks) and length(pending_offsets) > config.max_acks ->
+          Logger.error(
+            "Restarting worker for topic #{topic}, acks overload at partition #{partition}"
+          )
 
-      true ->
-        :ok
-    end
+          exit(:acks_overload)
+
+        true ->
+          :ok
+      end
+    end)
+
+    # Потенциально можем заменить на сумму по всем партициям
+    # count =
+    #   Enum.reduce(acks, 0, fn {_, {_acked_offsets, _current_offset, pending_offsets}}, acc ->
+    #     acc + length(pending_offsets)
+    #   end)
+
+    # cond do
+    #   is_integer(config.max_acks) and count > config.max_acks ->
+    #     Logger.error("Restarting worker, acks overload: #{count}")
+    #     exit(:acks_overload)
+
+    #   true ->
+    #     :ok
+    # end
   end
 end
