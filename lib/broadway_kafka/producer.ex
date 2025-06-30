@@ -251,18 +251,12 @@ defmodule BroadwayKafka.Producer do
   @impl GenStage
   def init(opts) do
     Process.flag(:trap_exit, true)
-
-    Logger.error("Starting producer, opts: #{inspect(opts)}")
-
     {_module, module_opts} = opts[:broadway][:producer][:module]
-
     max_acks = Keyword.get(module_opts, :max_acks, :infinity)
 
     config =
       opts[:initialized_client_config]
       |> Map.put(:max_acks, max_acks)
-
-    Logger.error("Starting producer, config: #{inspect(config)}")
 
     draining_after_revoke_flag =
       self()
@@ -819,9 +813,6 @@ defmodule BroadwayKafka.Producer do
   end
 
   defp check_overload!(%{acks: acks, config: config}) do
-    Logger.error("Check overload, acks: #{inspect(acks)}")
-
-    # Для начала попробуем ограничение по каждой партиции
     Enum.each(acks, fn {{_, topic, partition}, {_acked_offsets, _current_offset, pending_offsets}} ->
       cond do
         is_integer(config.max_acks) and length(pending_offsets) > config.max_acks ->
@@ -835,20 +826,5 @@ defmodule BroadwayKafka.Producer do
           :ok
       end
     end)
-
-    # Потенциально можем заменить на сумму по всем партициям
-    # count =
-    #   Enum.reduce(acks, 0, fn {_, {_acked_offsets, _current_offset, pending_offsets}}, acc ->
-    #     acc + length(pending_offsets)
-    #   end)
-
-    # cond do
-    #   is_integer(config.max_acks) and count > config.max_acks ->
-    #     Logger.error("Restarting worker, acks overload: #{count}")
-    #     exit(:acks_overload)
-
-    #   true ->
-    #     :ok
-    # end
   end
 end
