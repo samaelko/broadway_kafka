@@ -251,8 +251,12 @@ defmodule BroadwayKafka.Producer do
   @impl GenStage
   def init(opts) do
     Process.flag(:trap_exit, true)
+    {_module, module_opts} = opts[:broadway][:producer][:module]
+    max_acks = Keyword.get(module_opts, :max_acks, :infinity)
 
-    config = opts[:initialized_client_config]
+    config =
+      opts[:initialized_client_config]
+      |> Map.put(:max_acks, max_acks)
 
     draining_after_revoke_flag =
       self()
@@ -315,6 +319,7 @@ defmodule BroadwayKafka.Producer do
 
   @impl GenStage
   def handle_demand(incoming_demand, %{demand: demand} = state) do
+    check_overload!(state)
     maybe_schedule_poll(%{state | demand: demand + incoming_demand}, 0)
   end
 
@@ -352,6 +357,7 @@ defmodule BroadwayKafka.Producer do
     #
     # Note the key may be out of date when polling has been scheduled and
     # assignments were revoked afterwards, which is why check 3 is necessary.
+    check_overload!(state)
     offset = Acknowledger.last_offset(acks, key)
 
     if not state.shutting_down? and
@@ -371,10 +377,13 @@ defmodule BroadwayKafka.Producer do
   end
 
   def handle_info(:maybe_schedule_poll, state) do
+    check_overload!(state)
     maybe_schedule_poll(%{state | receive_timer: nil}, state.receive_interval)
   end
 
   def handle_info({:put_assignments, group_generation_id, assignments}, state) do
+    check_overload!(state)
+
     list =
       Enum.map(assignments, fn assignment ->
         brod_received_assignment(
@@ -418,6 +427,7 @@ defmodule BroadwayKafka.Producer do
   end
 
   def handle_info({:ack, key, offsets}, state) do
+    check_overload!(state)
     %{group_coordinator: group_coordinator, client: client, acks: acks, config: config} = state
     {generation_id, topic, partition} = key
 
@@ -800,5 +810,21 @@ defmodule BroadwayKafka.Producer do
         state.config.offset_commit_on_ack
 
     %{config | offset_commit_on_ack: offset_commit_on_ack}
+  end
+
+  defp check_overload!(%{acks: acks, config: config}) do
+    Enum.each(acks, fn {{_, topic, partition}, {_acked_offsets, _current_offset, pending_offsets}} ->
+      cond do
+        is_integer(config.max_acks) and length(pending_offsets) > config.max_acks ->
+          Logger.error(
+            "Restarting worker for topic #{topic}, acks overload at partition #{partition}"
+          )
+
+          exit(:acks_overload)
+
+        true ->
+          :ok
+      end
+    end)
   end
 end
